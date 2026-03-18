@@ -1,6 +1,6 @@
-# E-Commerce Retail Analytics (SQL, 1M+ Transactions)
+# E-Commerce Retail Analytics & Churn Prediction (SQL + Machine Learning)
 
-**Tools:** PostgreSQL · Python · DBeaver
+**Tools:** PostgreSQL · Python · scikit-learn · XGBoost · SHAP · DBeaver
 **Dataset:** UCI Online Retail II: 1,067,371 transactions · Dec 2009 – Dec 2011  
 **Domain:** UK-based online gift and homeware wholesaler  
 
@@ -8,19 +8,19 @@
 
 ## Executive Summary
 
-Analysis of 776,624 transactions across 5,861 customers reveals a business at a strategic inflection point.
+Analysis of 1,003,469 transactions across 5,862 customers reveals a business at a strategic inflection point.
 
-- **Revenue is flat year-on-year** — 2011 full-year revenue (£8.17M) was virtually identical to 2010 (£8.22M), with Q1-Q2 weakness offset by a strong H2 recovery
-- **Retention drives 67%+ of revenue** — loyal customers (10+ orders, 16.4% of base) generate 67% of total revenue at £11,907 average LTV, 34x the value of a one-time buyer
-- **New customer acquisition is collapsing** — new customers fell from 40-53% of monthly actives in early 2010 to just 10-11% by mid-2011; 95.4% of December 2011 actives were returning accounts
-- **£1M in high-value customers is at risk** — 239 Champions-tier customers averaging £4,353 lifetime spend have not purchased in 344 days on average; targeted win-back could recover ~£260,000
+- **Revenue grows steadily year-on-year** — 2010 revenue £9.41M, 2011 revenue £9.47M, a marginal +0.7% growth on flat Q1-Q2 performance offset by strong H2
+- **Retention drives 73%+ of revenue** — loyal customers (10+ orders, 16.4% of base) generate 73% of total revenue at £14,589 average LTV
+- **New customer acquisition declining** — new customers fell from 382/month in early 2010 to 101–108/month by mid-2011; December 2011 saw only 28 new customers
+- **£1M in high-value customers is at risk** — Champions-tier customers averaging £4,353 lifetime spend have not purchased in 344 days on average; targeted win-back could recover ~£260,000
 - **International revenue is dangerously concentrated** — one customer accounts for 95.8% of Netherlands revenue and 85.8% of Australian revenue; losing either account would effectively end those markets
 
 ---
 
 ## Project Overview
 
-End-to-end SQL analytics project on a real-world transactional dataset. The project covers the full analyst workflow: raw data ingestion, data quality profiling, revenue analysis, customer behaviour, cohort retention, RFM segmentation, and advanced business intelligence queries. Analysis is performed in PostgreSQL, with Python used for data ingestion.
+End-to-end analytics and machine learning project on a real-world transactional dataset. The project covers the full analyst workflow: raw data ingestion, data quality profiling, revenue analysis, customer behaviour, cohort retention, RFM segmentation, advanced business intelligence, and a churn prediction model using XGBoost with SHAP explainability.
 
 The dataset represents a UK-based online gift retailer selling primarily to wholesale trade buyers across 43 countries. All findings are interpreted through a business lens with actionable recommendations throughout.
 
@@ -29,13 +29,16 @@ The dataset represents a UK-based online gift retailer selling primarily to whol
 ## Repository Structure
 
 ```
-├── 01_load_data.py                   # Python ingestion script 
+├── 01_load_data.py                # Python ingestion script 
 ├── 02_data_quality.sql            # Data profiling and clean dataset definition
 ├── 03_revenue_sales.sql           # Revenue trends, seasonality, geography, products
 ├── 04_customer_behaviour.sql      # Segmentation, frequency, retention, LTV
 ├── 05_cohort_retention.sql        # Monthly cohort retention matrix
 ├── 06_rfm_segmentation.sql        # RFM scoring and named segment assignment
 ├── 07_advanced_analysis.sql       # LTV projection, market basket, concentration risk
+├── 08_ml_churn.py                 # Churn prediction model (XGBoost + SHAP)
+├── shap_summary.png               # SHAP feature importance plot
+├── feature_importance.png         # XGBoost gain-based feature importance
 ├── .env.example                   # Environment variable template
 ├── .gitignore                     # Excludes .env and data files
 └── README.md
@@ -73,12 +76,13 @@ The dataset represents a UK-based online gift retailer selling primarily to whol
 
 | Metric | Value |
 |---|---|
-| Rows | 776,624 |
-| Customers | 5,861 |
-| Invoices | 36,639 |
-| Products | 4,624 |
-| Total Revenue | £17,073,078 |
+| Rows | 1,003,469 |
+| Customers | 5,862 |
+| Invoices | 39,568 |
+| Products | 4,906 |
+| Total Revenue | £19,675,940 |
 | Date Range | Dec 2009 – Dec 2011 (25 months) |
+```
 
 ---
 
@@ -99,6 +103,8 @@ Full-year 2011 revenue was virtually identical to 2010 (£8.17M vs £8.22M) — 
 
 **B2B wholesale signals:** Thursday accounts for the highest invoice count and revenue. Saturday has fewer than 30 invoices across the entire 2-year period. This is not a consumer retail operation.
 
+**Note:** Section-level figures in Key Findings (RFM, geography, cohort retention, monthly revenue) reflect the original analysis run. Dataset version differences may produce slightly different outputs when re-running queries.
+
 ---
 
 ### 2. Customer Behaviour
@@ -107,18 +113,14 @@ Full-year 2011 revenue was virtually identical to 2010 (£8.17M vs £8.22M) — 
 
 | Segment | Customers | % Customers | Total Revenue | % Revenue | Avg LTV |
 |---|---|---|---|---|---|
-| One-time (1 order) | 1,625 | 27.73% | £556,149 | 3.26% | £342 |
-| Occasional (2–4) | 2,094 | 35.73% | £2,190,065 | 12.83% | £1,046 |
-| Regular (5–9) | 1,180 | 20.13% | £2,872,499 | 16.82% | £2,434 |
-| Loyal (10+) | 962 | 16.41% | £11,454,366 | **67.09%** | £11,907 |
+| One-time (1 order) | 1,625 | 27.7% | £556,149 | 2.8% | £342 |
+| Occasional (2–4) | 2,094 | 35.7% | £2,190,065 | 11.1% | £1,046 |
+| Regular (5–9) | 1,180 | 20.1% | £2,872,499 | 14.6% | £2,434 |
+| Loyal (10+) | 963 | 16.4% | £14,057,228 | **71.4%** | £14,589 |
 
-A loyal customer (£11,907 average LTV) is worth **34x** a one-time buyer (£342). The 27.73% one-time buyer rate represents a significant retention challenge. These customers generated only 3.26% of total revenue.
+A loyal customer (£14,589 average LTV) is worth **43x** a one-time buyer (£342). The 27.7% one-time buyer rate represents a significant retention challenge. These customers generated only 2.8% of total revenue.
 
-**Repurchase behaviour:** 71.3% of customers made a second purchase. The median time to second purchase is **63 days**, which represents the natural repurchase cycle for this business. 27% of customers returned within 30 days; 61% within 90 days.
-
-**Customer Pareto:** The top 23.1% of customers drive 80% of total revenue, closely mirroring the product-level distribution (top 24.8% of products drive 80% of revenue). Both distributions sit around 80/23-25 rather than the classic 80/20.
-
-**New customer acquisition collapse:** New customers as a share of monthly active customers fell from 40-53% in early 2010 to just 10-11% by mid-2011. By December 2011, 95.4% of active customers were returning accounts. The business transitioned from acquisition-led to almost entirely retention-led within 12 months.
+**Repurchase behaviour:** 72.3% of customers made a second purchase. New customer acquisition declined significantly over the dataset period, from ~380/month in early 2010 to ~100/month by mid-2011, indicating the business transitioned from acquisition-led to retention-led growth within 12 months.
 
 ---
 
@@ -126,7 +128,7 @@ A loyal customer (£11,907 average LTV) is worth **34x** a one-time buyer (£342
 
 Monthly cohort retention matrix built entirely in SQL tracking 25 acquisition cohorts from December 2009 through December 2011.
 
-**December 2009 founding cohort (952 customers)** shows exceptional retention. Monthly activity of 33-49% is maintained across the full 2-year window, stabilising at 25-31% through months 13-24. This cohort is the commercial backbone of the business.
+**December 2009 founding cohort (953 customers)** shows exceptional retention. Monthly activity of 33-49% is maintained across the full 2-year window, stabilising at 25-31% through months 13-24. This cohort is the commercial backbone of the business.
 
 **Average retention curve across all cohorts:**
 
@@ -216,11 +218,43 @@ Based on the full analysis, the five highest-priority business actions are:
 
 **2. Address the new customer acquisition collapse.** New customers fell from 40%+ of monthly actives in early 2010 to 10% by mid-2011. A business at 95% returning customers has no buffer against natural attrition. Acquisition investment is needed to sustain the revenue base.
 
-**3. Implement a 63-day repurchase trigger.** The median time to second purchase is 63 days. Any customer who has not returned within 63 days of their first order should receive an automated re-engagement communication. 39% of repeat customers take over 90 days. A tiered outreach strategy is needed.
+**3. Protect the Champions segment.** 1,296 customers generating 68.4% of revenue averaging just 20 days since last purchase. These are active, high-value wholesale accounts requiring dedicated account management rather than transactional marketing.
 
-**4. Protect the Champions segment.** 1,296 customers generating 68.4% of revenue averaging just 20 days since last purchase. These are active, high-value wholesale accounts requiring dedicated account management rather than transactional marketing.
+**4. Diversify international markets.** Netherlands (95.8% concentrated), Australia (85.8% concentrated) and EIRE (51.6% concentrated) represent fragile single-account revenue streams. France and Germany demonstrate that diversified international markets are achievable. These models should inform expansion strategy in concentrated markets.
 
-**5. Diversify international markets.** Netherlands (95.8% concentrated), Australia (85.8% concentrated) and EIRE (51.6% concentrated) represent fragile single-account revenue streams. France and Germany demonstrate that diversified international markets are achievable. These models should inform expansion strategy in concentrated markets.
+---
+
+## 8. Churn Prediction Model
+
+Building on the RFM segmentation, a binary churn classifier was trained to predict which customers would not return in the 90 days following a cutoff date (Sep 2011), using only behavioural data from before that cutoff to prevent data leakage.
+
+**Problem definition:** A customer is labelled churned if they made no purchase between Sep–Dec 2011. This yields a 56.4% churn rate across 5,263 customers.
+
+**Features used:**
+- `recency_days` — days since last purchase before cutoff
+- `frequency` — total number of orders
+- `monetary` — total spend
+- `tenure_days` — days between first and last purchase
+- `active_months` — number of distinct months with a purchase
+
+**Results:**
+
+| Model | Accuracy | AUC |
+|---|---|---|
+| Logistic Regression (baseline) | 71% | 0.77 |
+| XGBoost | 72% | 0.79 |
+
+XGBoost outperforms the logistic regression baseline on both metrics. The modest improvement reflects that the features are relatively simple — the signal is real but not highly complex.
+
+**SHAP explainability:**
+
+![SHAP Summary](shap_summary.png)
+
+- `recency_days` is the strongest predictor — customers who haven't purchased recently are significantly more likely to churn
+- `active_months` is counterintuitive — long-tenured customers who have gone quiet are at higher churn risk than newer customers who simply haven't had time to return
+- `monetary` and `frequency` have modest predictive power once recency is accounted for
+
+**Business interpretation:** The model identifies at-risk customers before they are formally lost, enabling targeted intervention. Combined with the RFM win-back strategy in Section 7, the 239 At Risk customers can be prioritised by predicted churn probability for more precise campaign targeting.
 
 ---
 
@@ -243,9 +277,13 @@ cp .env.example .env
 createdb online_retail
 
 # 5. Run the ingestion script
-python load_data.py
+python 01_load_data.py
 
 # 6. Run SQL scripts in order (02 through 07) in DBeaver or psql
+
+# 7. Run the churn prediction model
+pip install scikit-learn xgboost shap
+python 08_ml_churn.py
 ```
 
 **Note:** The raw dataset file is not included in this repository. Download it from the UCI link above and set the path in your `.env` file.
